@@ -155,6 +155,10 @@ class ella_model_loader:
             
             unet = UNet2DConditionModel(**converted_unet_config)
             unet.load_state_dict(converted_unet, strict=False)
+            ella.to(device, dtype=dtype)
+            unet = unet.to(device)
+            ella_unet = ELLAProxyUNet(ella, unet)
+
             pbar.update(1)
             # 3. text_model
             print("loading text model")
@@ -163,7 +167,7 @@ class ella_model_loader:
                 'num_train_timesteps': 1000,
                 'beta_start':    0.00085,
                 'beta_end':      0.012,
-                'beta_schedule': "linear",
+                'beta_schedule': "scaled_linear",
                 'steps_offset': 1
             }
             # 4. tokenizer
@@ -174,14 +178,11 @@ class ella_model_loader:
             pbar.update(1)
             del sd
 
-            ella.to(device, dtype=dtype)
-            unet = unet.to(device)
-            ella_unet = ELLAProxyUNet(ella, unet)
             pbar.update(1)
 
             print("creating pipeline")
             self.pipe = StableDiffusionPipeline(
-                unet=unet,
+                unet=ella_unet,
                 vae=vae,
                 text_encoder=text_encoder,
                 tokenizer=tokenizer,
@@ -193,7 +194,6 @@ class ella_model_loader:
             )
             print("pipeline created")
             pbar.update(1)
-            self.pipe.unet = ella_unet
             
             ella_model = {
                 'pipe': self.pipe,
@@ -244,7 +244,7 @@ class ella_sampler:
                 'num_train_timesteps': 1000,
                 'beta_start':    0.00085,
                 'beta_end':      0.012,
-                'beta_schedule': "linear",
+                'beta_schedule': "scaled_linear",
                 'steps_offset': 1
             }
         if scheduler == 'DPMSolverMultistepScheduler':
@@ -283,11 +283,10 @@ class ella_sampler:
             torch.Generator(device=device).manual_seed(seed + i)
             for i in range(ella_embeds["batch_size"])
             ],
-                output_type="np.array",
+                output_type="pt",
             ).images
 
-            image_out = torch.from_numpy(images).cpu().float()
-         
+            image_out = images.permute(0, 2, 3, 1).cpu().float()
             return (image_out,)
 
 class ella_t5_embeds:
@@ -299,6 +298,9 @@ class ella_t5_embeds:
             "max_length": ("INT", {"default": 128, "min": 1, "max": 512, "step": 1}),
             "fixed_negative": ("BOOLEAN", {"default": False}),
             },    
+            "optional": {
+            "flexible_max_length": ("BOOLEAN", {"default": True}),
+            }
         }
 
     RETURN_TYPES = ("ELLAEMBEDS",)
@@ -306,7 +308,7 @@ class ella_t5_embeds:
     FUNCTION = "process"
     CATEGORY = "ELLA-Wrapper"
 
-    def process(self, prompt, batch_size, max_length, fixed_negative):
+    def process(self, prompt, batch_size, max_length, fixed_negative, flexible_max_length=True):
         device = mm.get_torch_device()
         mm.unload_all_models()
         mm.soft_empty_cache()
@@ -324,8 +326,8 @@ class ella_t5_embeds:
             print("generating embeds")
             prompt = [prompt] * batch_size    
             prompt = [prompt] if isinstance(prompt, str) else prompt
-            #batch_size = len(prompt)
-
+            if flexible_max_length:
+                max_length = None
             prompt_embeds = t5_encoder(prompt, max_length=max_length).to(device, dtype)
             negative_prompt_embeds = t5_encoder([""] * batch_size, max_length=max_length if fixed_negative else None).to(device, dtype)
 

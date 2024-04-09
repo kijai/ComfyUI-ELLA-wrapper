@@ -2,6 +2,9 @@
 
 ![image](https://github.com/kijai/ComfyUI-ELLA-wrapper/assets/40791699/d255385f-dd10-4eec-ada7-b7774080c6a7)
 
+![image](https://github.com/kijai/ComfyUI-ELLA-wrapper/assets/40791699/2d97a745-accc-4ff1-a0c4-c37481ce732f)
+
+
 You can use any 1.5 model, rest is **auto downloaded**, sources:
 
 ELLA model (132MB):

@@ -5,7 +5,7 @@ from typing import Any, Optional, Union
 from contextlib import nullcontext
 import safetensors.torch
 import torch
-from diffusers import DPMSolverMultistepScheduler, StableDiffusionPipeline, EulerDiscreteScheduler, AutoencoderKL, UNet2DConditionModel, DDIMScheduler, LCMScheduler, DDPMScheduler, DEISMultistepScheduler, PNDMScheduler
+from diffusers import DPMSolverMultistepScheduler, StableDiffusionPipeline, EulerDiscreteScheduler, EulerAncestralDiscreteScheduler, AutoencoderKL, UNet2DConditionModel, DDIMScheduler, LCMScheduler, DDPMScheduler, DEISMultistepScheduler, PNDMScheduler
 from omegaconf import OmegaConf
 from .model import ELLA, T5TextEmbedder
 from transformers import CLIPTokenizer
@@ -221,6 +221,7 @@ class ella_sampler:
                     'PNDMScheduler',
                     'DEISMultistepScheduler',
                     'EulerDiscreteScheduler',
+                    'EulerAncestralDiscreteScheduler'
                 ], {
                     "default": 'DPMSolverMultistepScheduler'
                 }),
@@ -245,24 +246,28 @@ class ella_sampler:
                 'beta_start':    0.00085,
                 'beta_end':      0.012,
                 'beta_schedule': "scaled_linear",
-                'steps_offset': 1
+                'steps_offset': 1,
             }
         if scheduler == 'DPMSolverMultistepScheduler':
             noise_scheduler = DPMSolverMultistepScheduler(**scheduler_config)
         elif scheduler == 'DPMSolverMultistepScheduler_SDE_karras':
             scheduler_config.update({"algorithm_type": "sde-dpmsolver++"})
-            scheduler_config.update({"use_karras_sigmas": "True"})
+            scheduler_config.update({"use_karras_sigmas": True})
             noise_scheduler = DPMSolverMultistepScheduler(**scheduler_config)
         elif scheduler == 'DDPMScheduler':
             noise_scheduler = DDPMScheduler(**scheduler_config)
         elif scheduler == 'LCMScheduler':
             noise_scheduler = LCMScheduler(**scheduler_config)
         elif scheduler == 'PNDMScheduler':
+            scheduler_config.update({"set_alpha_to_one": False})
+            scheduler_config.update({"trained_betas": None})
             noise_scheduler = PNDMScheduler(**scheduler_config)
         elif scheduler == 'DEISMultistepScheduler':
             noise_scheduler = DEISMultistepScheduler(**scheduler_config)
         elif scheduler == 'EulerDiscreteScheduler':
             noise_scheduler = EulerDiscreteScheduler(**scheduler_config)
+        elif scheduler == 'EulerAncestralDiscreteScheduler':
+            noise_scheduler = EulerAncestralDiscreteScheduler(**scheduler_config)
         pipe.scheduler = noise_scheduler
 
         autocast_condition = (dtype != torch.float32) and not mm.is_device_mps(device)

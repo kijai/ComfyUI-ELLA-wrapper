@@ -105,7 +105,7 @@ class ella_model_loader:
     RETURN_TYPES = ("ELLAMODEL",)
     RETURN_NAMES = ("ella_model",)
     FUNCTION = "loadmodel"
-    CATEGORY = "ellaWrapper"
+    CATEGORY = "ELLA-Wrapper"
 
     def loadmodel(self, model, clip, vae):
         mm.soft_empty_cache()

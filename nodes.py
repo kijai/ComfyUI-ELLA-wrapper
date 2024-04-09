@@ -296,7 +296,7 @@ class ella_t5_embeds:
         return {"required": {
             "prompt": ("STRING", {"multiline": True, "default": "A vivid red book with a smooth, matte cover lies next to a glossy yellow vase. The vase, with a slightly curved silhouette, stands on a dark wood table with a noticeable grain pattern. The book appears slightly worn at the edges, suggesting frequent use, while the vase holds a fresh array of multicolored wildflowers.",}),
             "batch_size": ("INT", {"default": 1, "min": 1, "max": 256, "step": 1}),
-            "max_length": ("INT", {"default": 128, "min": 1, "max": 256, "step": 1}),
+            "max_length": ("INT", {"default": 128, "min": 1, "max": 512, "step": 1}),
             "fixed_negative": ("BOOLEAN", {"default": False}),
             },    
         }
@@ -326,10 +326,8 @@ class ella_t5_embeds:
             prompt = [prompt] if isinstance(prompt, str) else prompt
             #batch_size = len(prompt)
 
-            prompt_embeds = t5_encoder(prompt, max_length=None).to(device, dtype)
-            negative_prompt_embeds = t5_encoder(
-                [""] * batch_size, max_length=max_length if fixed_negative else None
-            ).to(device, dtype)
+            prompt_embeds = t5_encoder(prompt, max_length=max_length).to(device, dtype)
+            negative_prompt_embeds = t5_encoder([""] * batch_size, max_length=max_length if fixed_negative else None).to(device, dtype)
 
             max_length = max([prompt_embeds.size(1), negative_prompt_embeds.size(1)])
             b, _, d = prompt_embeds.shape

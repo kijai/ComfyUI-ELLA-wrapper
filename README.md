@@ -1,3 +1,18 @@
+# ComfyUI wrapper nodes to use the Diffusers implementation of ELLA
+
+![image](https://github.com/kijai/ComfyUI-ELLA-wrapper/assets/40791699/d255385f-dd10-4eec-ada7-b7774080c6a7)
+
+You can use any 1.5 model, rest is **auto downloaded**, sources:
+
+ELLA model (132MB):
+
+https://huggingface.co/QQGYLab/ELLA/blob/main/ella-sd1.5-tsc-t5xl.safetensors
+
+Also requires google-flan-t5-xl, for which I have opted to autodownload this repo (Hugginface cache, 6GB):
+
+https://huggingface.co/ybelkada/flan-t5-xl-sharded-bf16/tree/main
+
+# Original repo:
 # ELLA: Equip Diffusion Models with LLM for Enhanced Semantic Alignment
 
 <div align="center">

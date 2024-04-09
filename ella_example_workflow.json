@@ -1,20 +1,80 @@
 {
-  "last_node_id": 35,
-  "last_link_id": 34,
+  "last_node_id": 37,
+  "last_link_id": 38,
   "nodes": [
+    {
+      "id": 30,
+      "type": "PreviewImage",
+      "pos": [
+        1321,
+        298
+      ],
+      "size": {
+        "0": 858.0182495117188,
+        "1": 597.3363647460938
+      },
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 37
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "PreviewImage"
+      }
+    },
+    {
+      "id": 37,
+      "type": "ella_t5_embeds",
+      "pos": [
+        319,
+        470
+      ],
+      "size": [
+        570.6799011230469,
+        192.4492645263672
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "outputs": [
+        {
+          "name": "ella_embeds",
+          "type": "ELLAEMBEDS",
+          "links": [
+            38
+          ],
+          "shape": 3,
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "ella_t5_embeds"
+      },
+      "widgets_values": [
+        "A vivid red book with a smooth, matte cover lies next to a glossy yellow vase. The vase, with a slightly curved silhouette, stands on a dark wood table with a noticeable grain pattern. The book appears slightly worn at the edges, suggesting frequent use, while the vase holds a fresh array of multicolored wildflowers.",
+        4,
+        128,
+        false
+      ]
+    },
     {
       "id": 29,
       "type": "CheckpointLoaderSimple",
       "pos": [
-        289,
-        315
+        328,
+        313
       ],
       "size": {
-        "0": 315,
+        "0": 335.9272766113281,
         "1": 98
       },
       "flags": {},
-      "order": 0,
+      "order": 1,
       "mode": 0,
       "outputs": [
         {
@@ -52,121 +112,11 @@
       ]
     },
     {
-      "id": 30,
-      "type": "PreviewImage",
-      "pos": [
-        1316,
-        307
-      ],
-      "size": {
-        "0": 590.6172485351562,
-        "1": 614.5595092773438
-      },
-      "flags": {},
-      "order": 4,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "images",
-          "type": "IMAGE",
-          "link": 34
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "PreviewImage"
-      }
-    },
-    {
-      "id": 34,
-      "type": "ella_t5_embeds",
-      "pos": [
-        512,
-        484
-      ],
-      "size": {
-        "0": 400,
-        "1": 200
-      },
-      "flags": {},
-      "order": 1,
-      "mode": 0,
-      "outputs": [
-        {
-          "name": "ella_embeds",
-          "type": "ELLAEMBEDS",
-          "links": [
-            33
-          ],
-          "shape": 3
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "ella_t5_embeds"
-      },
-      "widgets_values": [
-        "A vivid red book with a smooth, matte cover lies next to a glossy yellow vase. The vase, with a slightly curved silhouette, stands on a dark wood table with a noticeable grain pattern. The book appears slightly worn at the edges, suggesting frequent use, while the vase holds a fresh array of multicolored wildflowers.",
-        4,
-        128,
-        false
-      ]
-    },
-    {
-      "id": 35,
-      "type": "ella_sampler",
-      "pos": [
-        962,
-        317
-      ],
-      "size": {
-        "0": 315,
-        "1": 222
-      },
-      "flags": {},
-      "order": 3,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "ella_model",
-          "type": "ELLAMODEL",
-          "link": 32
-        },
-        {
-          "name": "ella_embeds",
-          "type": "ELLAEMBEDS",
-          "link": 33,
-          "slot_index": 1
-        }
-      ],
-      "outputs": [
-        {
-          "name": "images",
-          "type": "IMAGE",
-          "links": [
-            34
-          ],
-          "shape": 3,
-          "slot_index": 0
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "ella_sampler"
-      },
-      "widgets_values": [
-        512,
-        512,
-        25,
-        10,
-        915981713542918,
-        "randomize",
-        "DDPMScheduler"
-      ]
-    },
-    {
       "id": 27,
       "type": "ella_model_loader",
       "pos": [
-        680,
-        317
+        709,
+        313
       ],
       "size": {
         "0": 210,
@@ -198,7 +148,7 @@
           "name": "ella_model",
           "type": "ELLAMODEL",
           "links": [
-            32
+            35
           ],
           "shape": 3,
           "slot_index": 0
@@ -207,6 +157,57 @@
       "properties": {
         "Node name for S&R": "ella_model_loader"
       }
+    },
+    {
+      "id": 36,
+      "type": "ella_sampler",
+      "pos": [
+        963,
+        312
+      ],
+      "size": {
+        "0": 315,
+        "1": 222
+      },
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "ella_model",
+          "type": "ELLAMODEL",
+          "link": 35
+        },
+        {
+          "name": "ella_embeds",
+          "type": "ELLAEMBEDS",
+          "link": 38,
+          "slot_index": 1
+        }
+      ],
+      "outputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "links": [
+            37
+          ],
+          "shape": 3,
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "ella_sampler"
+      },
+      "widgets_values": [
+        768,
+        512,
+        25,
+        10,
+        111686457065939,
+        "fixed",
+        "DDPMScheduler"
+      ]
     }
   ],
   "links": [
@@ -235,28 +236,28 @@
       "VAE"
     ],
     [
-      32,
+      35,
       27,
       0,
-      35,
+      36,
       0,
       "ELLAMODEL"
     ],
     [
-      33,
-      34,
-      0,
-      35,
-      1,
-      "ELLAEMBEDS"
-    ],
-    [
-      34,
-      35,
+      37,
+      36,
       0,
       30,
       0,
       "IMAGE"
+    ],
+    [
+      38,
+      37,
+      0,
+      36,
+      1,
+      "ELLAEMBEDS"
     ]
   ],
   "groups": [],

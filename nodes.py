@@ -5,7 +5,7 @@ from typing import Any, Optional, Union
 from contextlib import nullcontext
 import safetensors.torch
 import torch
-from diffusers import DPMSolverMultistepScheduler, StableDiffusionPipeline, AutoencoderKL, UNet2DConditionModel, DDIMScheduler, LCMScheduler, DDPMScheduler, DEISMultistepScheduler, PNDMScheduler
+from diffusers import DPMSolverMultistepScheduler, StableDiffusionPipeline, EulerDiscreteScheduler, AutoencoderKL, UNet2DConditionModel, DDIMScheduler, LCMScheduler, DDPMScheduler, DEISMultistepScheduler, PNDMScheduler
 from omegaconf import OmegaConf
 from .model import ELLA, T5TextEmbedder
 from transformers import CLIPTokenizer
@@ -214,13 +214,15 @@ class ella_sampler:
             "seed": ("INT", {"default": 0, "min": 0, "max": 0xffffffffffffffff}),
              "scheduler": (
                 [
-                    'DDIMScheduler',
+                    'DPMSolverMultistepScheduler',
+                    'DPMSolverMultistepScheduler_SDE_karras',
                     'DDPMScheduler',
                     'LCMScheduler',
                     'PNDMScheduler',
-                    'DEISMultistepScheduler'
+                    'DEISMultistepScheduler',
+                    'EulerDiscreteScheduler',
                 ], {
-                    "default": 'DDPMScheduler'
+                    "default": 'DPMSolverMultistepScheduler'
                 }),
             },    
         }
@@ -245,8 +247,12 @@ class ella_sampler:
                 'beta_schedule': "linear",
                 'steps_offset': 1
             }
-        if scheduler == 'DDIMScheduler':
-            noise_scheduler = DDIMScheduler(**scheduler_config)
+        if scheduler == 'DPMSolverMultistepScheduler':
+            noise_scheduler = DPMSolverMultistepScheduler(**scheduler_config)
+        elif scheduler == 'DPMSolverMultistepScheduler_SDE_karras':
+            scheduler_config.update({"algorithm_type": "sde-dpmsolver++"})
+            scheduler_config.update({"use_karras_sigmas": "True"})
+            noise_scheduler = DPMSolverMultistepScheduler(**scheduler_config)
         elif scheduler == 'DDPMScheduler':
             noise_scheduler = DDPMScheduler(**scheduler_config)
         elif scheduler == 'LCMScheduler':
@@ -255,6 +261,8 @@ class ella_sampler:
             noise_scheduler = PNDMScheduler(**scheduler_config)
         elif scheduler == 'DEISMultistepScheduler':
             noise_scheduler = DEISMultistepScheduler(**scheduler_config)
+        elif scheduler == 'EulerDiscreteScheduler':
+            noise_scheduler = EulerDiscreteScheduler(**scheduler_config)
         pipe.scheduler = noise_scheduler
 
         autocast_condition = (dtype != torch.float32) and not mm.is_device_mps(device)

@@ -128,7 +128,7 @@ class PerceiverResampler(nn.Module):
 
 
 class T5TextEmbedder(nn.Module):
-    def __init__(self, pretrained_path="google/flan-t5-xl", max_length=None):
+    def __init__(self, pretrained_path="ybelkada/flan-t5-xl-sharded-bf16", max_length=None):
         super().__init__()
         self.model = T5EncoderModel.from_pretrained(pretrained_path)
         self.tokenizer = T5Tokenizer.from_pretrained(pretrained_path)

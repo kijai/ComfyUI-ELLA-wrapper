@@ -1,85 +1,13 @@
 {
-  "last_node_id": 6,
-  "last_link_id": 10,
+  "last_node_id": 35,
+  "last_link_id": 34,
   "nodes": [
     {
-      "id": 4,
-      "type": "PreviewImage",
-      "pos": [
-        1401,
-        136
-      ],
-      "size": {
-        "0": 593,
-        "1": 648
-      },
-      "flags": {},
-      "order": 3,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "images",
-          "type": "IMAGE",
-          "link": 10
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "PreviewImage"
-      }
-    },
-    {
-      "id": 5,
-      "type": "ella_model_loader",
-      "pos": [
-        688,
-        144
-      ],
-      "size": {
-        "0": 210,
-        "1": 66
-      },
-      "flags": {},
-      "order": 1,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "model",
-          "type": "MODEL",
-          "link": 5
-        },
-        {
-          "name": "clip",
-          "type": "CLIP",
-          "link": 6,
-          "slot_index": 1
-        },
-        {
-          "name": "vae",
-          "type": "VAE",
-          "link": 7
-        }
-      ],
-      "outputs": [
-        {
-          "name": "ella_model",
-          "type": "ELLAMODEL",
-          "links": [
-            9
-          ],
-          "shape": 3,
-          "slot_index": 0
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "ella_model_loader"
-      }
-    },
-    {
-      "id": 3,
+      "id": 29,
       "type": "CheckpointLoaderSimple",
       "pos": [
-        310,
-        142
+        289,
+        315
       ],
       "size": {
         "0": 315,
@@ -93,7 +21,7 @@
           "name": "MODEL",
           "type": "MODEL",
           "links": [
-            5
+            20
           ],
           "shape": 3,
           "slot_index": 0
@@ -102,7 +30,7 @@
           "name": "CLIP",
           "type": "CLIP",
           "links": [
-            6
+            21
           ],
           "shape": 3
         },
@@ -110,7 +38,7 @@
           "name": "VAE",
           "type": "VAE",
           "links": [
-            7
+            22
           ],
           "shape": 3,
           "slot_index": 2
@@ -120,28 +48,93 @@
         "Node name for S&R": "CheckpointLoaderSimple"
       },
       "widgets_values": [
-        "1_5/v1-5-pruned.ckpt"
+        "1_5\\photon_v1.safetensors"
       ]
     },
     {
-      "id": 6,
+      "id": 30,
+      "type": "PreviewImage",
+      "pos": [
+        1316,
+        307
+      ],
+      "size": {
+        "0": 590.6172485351562,
+        "1": 614.5595092773438
+      },
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 34
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "PreviewImage"
+      }
+    },
+    {
+      "id": 34,
+      "type": "ella_t5_embeds",
+      "pos": [
+        512,
+        484
+      ],
+      "size": {
+        "0": 400,
+        "1": 200
+      },
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "outputs": [
+        {
+          "name": "ella_embeds",
+          "type": "ELLAEMBEDS",
+          "links": [
+            33
+          ],
+          "shape": 3
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "ella_t5_embeds"
+      },
+      "widgets_values": [
+        "A vivid red book with a smooth, matte cover lies next to a glossy yellow vase. The vase, with a slightly curved silhouette, stands on a dark wood table with a noticeable grain pattern. The book appears slightly worn at the edges, suggesting frequent use, while the vase holds a fresh array of multicolored wildflowers.",
+        4,
+        128,
+        false
+      ]
+    },
+    {
+      "id": 35,
       "type": "ella_sampler",
       "pos": [
-        947,
-        142
+        962,
+        317
       ],
-      "size": [
-        415,
-        487
-      ],
+      "size": {
+        "0": 315,
+        "1": 222
+      },
       "flags": {},
-      "order": 2,
+      "order": 3,
       "mode": 0,
       "inputs": [
         {
           "name": "ella_model",
           "type": "ELLAMODEL",
-          "link": 9
+          "link": 32
+        },
+        {
+          "name": "ella_embeds",
+          "type": "ELLAEMBEDS",
+          "link": 33,
+          "slot_index": 1
         }
       ],
       "outputs": [
@@ -149,72 +142,119 @@
           "name": "images",
           "type": "IMAGE",
           "links": [
-            10
+            34
           ],
           "shape": 3,
           "slot_index": 0
-        },
-        {
-          "name": "last_image",
-          "type": "IMAGE",
-          "links": null,
-          "shape": 3
         }
       ],
       "properties": {
         "Node name for S&R": "ella_sampler"
       },
       "widgets_values": [
-        "A vivid red book with a smooth, matte cover lies next to a glossy yellow vase. The vase, with a slightly curved silhouette, stands on a dark wood table with a noticeable grain pattern. The book appears slightly worn at the edges, suggesting frequent use, while the vase holds a fresh array of multicolored wildflowers.\n",
         512,
         512,
-        1,
         25,
         10,
-        933038223352312,
+        915981713542918,
         "randomize",
         "DDPMScheduler"
       ]
+    },
+    {
+      "id": 27,
+      "type": "ella_model_loader",
+      "pos": [
+        680,
+        317
+      ],
+      "size": {
+        "0": 210,
+        "1": 66
+      },
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 20
+        },
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 21,
+          "slot_index": 1
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": 22
+        }
+      ],
+      "outputs": [
+        {
+          "name": "ella_model",
+          "type": "ELLAMODEL",
+          "links": [
+            32
+          ],
+          "shape": 3,
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "ella_model_loader"
+      }
     }
   ],
   "links": [
     [
-      5,
-      3,
+      20,
+      29,
       0,
-      5,
+      27,
       0,
       "MODEL"
     ],
     [
-      6,
-      3,
+      21,
+      29,
       1,
-      5,
+      27,
       1,
       "CLIP"
     ],
     [
-      7,
-      3,
+      22,
+      29,
       2,
-      5,
+      27,
       2,
       "VAE"
     ],
     [
-      9,
-      5,
+      32,
+      27,
       0,
-      6,
+      35,
       0,
       "ELLAMODEL"
     ],
     [
-      10,
-      6,
+      33,
+      34,
       0,
-      4,
+      35,
+      1,
+      "ELLAEMBEDS"
+    ],
+    [
+      34,
+      35,
+      0,
+      30,
       0,
       "IMAGE"
     ]

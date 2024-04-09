@@ -73,72 +73,6 @@ class ELLAProxyUNet(torch.nn.Module):
             encoder_attention_mask=encoder_attention_mask,
             return_dict=return_dict,
         )
-def generate_image_with_flexible_max_length(
-    pipe, t5_encoder, prompt, fixed_negative=False, output_type="pt", **pipe_kwargs
-):
-    device = pipe.device
-    dtype = pipe.dtype
-    prompt = [prompt] if isinstance(prompt, str) else prompt
-    batch_size = len(prompt)
-
-    prompt_embeds = t5_encoder(prompt, max_length=None).to(device, dtype)
-    negative_prompt_embeds = t5_encoder(
-        [""] * batch_size, max_length=128 if fixed_negative else None
-    ).to(device, dtype)
-
-    # diffusers pipeline concatenate `prompt_embeds` too early...
-    # https://github.com/huggingface/diffusers/blob/b6d7e31d10df675d86c6fe7838044712c6dca4e9/src/diffusers/pipelines/stable_diffusion/pipeline_stable_diffusion.py#L913
-    pipe.unet.flexible_max_length_workaround = [
-        negative_prompt_embeds.size(1)
-    ] * batch_size + [prompt_embeds.size(1)] * batch_size
-
-    max_length = max([prompt_embeds.size(1), negative_prompt_embeds.size(1)])
-    b, _, d = prompt_embeds.shape
-    prompt_embeds = torch.cat(
-        [
-            prompt_embeds,
-            torch.zeros(
-                (b, max_length - prompt_embeds.size(1), d), device=device, dtype=dtype
-            ),
-        ],
-        dim=1,
-    )
-    negative_prompt_embeds = torch.cat(
-        [
-            negative_prompt_embeds,
-            torch.zeros(
-                (b, max_length - negative_prompt_embeds.size(1), d),
-                device=device,
-                dtype=dtype,
-            ),
-        ],
-        dim=1,
-    )
-
-    images = pipe(
-        prompt_embeds=prompt_embeds,
-        negative_prompt_embeds=negative_prompt_embeds,
-        **pipe_kwargs,
-        output_type=output_type,
-    ).images
-    pipe.unet.flexible_max_length_workaround = None
-    return images
-
-
-def load_ella(filename, device, dtype):
-    ella = ELLA()
-    safetensors.torch.load_model(ella, filename, strict=True)
-    ella.to(device, dtype=dtype)
-    return ella
-
-
-def load_ella_for_pipe(pipe, ella):
-    pipe.unet = ELLAProxyUNet(ella, pipe.unet)
-
-
-def offload_ella_for_pipe(pipe):
-    pipe.unet = pipe.unet.unet
-
 
 def generate_image_with_fixed_max_length(
     pipe, t5_encoder, prompt, output_type="pt", **pipe_kwargs
@@ -176,6 +110,7 @@ class ella_model_loader:
     def loadmodel(self, model, clip, vae):
         mm.soft_empty_cache()
         dtype = mm.unet_dtype()
+        vae_dtype = mm.vae_dtype()
         device = mm.get_torch_device()
 
         custom_config = {
@@ -231,24 +166,21 @@ class ella_model_loader:
                 'beta_schedule': "linear",
                 'steps_offset': 1
             }
-            
+            # 4. tokenizer
+            tokenizer_path = os.path.join(script_directory, "configs/tokenizer")
+            tokenizer = CLIPTokenizer.from_pretrained(tokenizer_path)
+
             scheduler=DPMSolverMultistepScheduler(**scheduler_config)
             pbar.update(1)
             del sd
-            print("loading ELLA")
-            ella_path = os.path.join(script_directory, 'checkpoints', 'ella-sd1.5-tsc-t5xl.safetensors')
-            ella = ELLA()
-            safetensors.torch.load_model(ella, ella_path, strict=True)
 
             ella.to(device, dtype=dtype)
             unet = unet.to(device)
             ella_unet = ELLAProxyUNet(ella, unet)
             pbar.update(1)
-            print("loading tokenizer")
-            tokenizer_path = os.path.join(script_directory, "configs/tokenizer")
-            tokenizer = CLIPTokenizer.from_pretrained(tokenizer_path)
+
             print("creating pipeline")
-            pipe = StableDiffusionPipeline(
+            self.pipe = StableDiffusionPipeline(
                 unet=unet,
                 vae=vae,
                 text_encoder=text_encoder,
@@ -261,12 +193,10 @@ class ella_model_loader:
             )
             print("pipeline created")
             pbar.update(1)
-            pipe.unet = ella_unet
-            t5_encoder = T5TextEmbedder().to(pipe.device, dtype=dtype)
+            self.pipe.unet = ella_unet
+            
             ella_model = {
-                'pipe': pipe,
-                'ella': ella,
-                't5_encoder': t5_encoder
+                'pipe': self.pipe,
             }
    
         return (ella_model,)
@@ -276,10 +206,9 @@ class ella_sampler:
     def INPUT_TYPES(s):
         return {"required": {
             "ella_model": ("ELLAMODEL",),
-            "prompt": ("STRING", {"multiline": True, "default": "A vivid red book with a smooth, matte cover lies next to a glossy yellow vase. The vase, with a slightly curved silhouette, stands on a dark wood table with a noticeable grain pattern. The book appears slightly worn at the edges, suggesting frequent use, while the vase holds a fresh array of multicolored wildflowers.",}),
+            "ella_embeds": ("ELLAEMBEDS",),
             "width": ("INT", {"default": 512, "min": 64, "max": 2048, "step": 64}),
             "height": ("INT", {"default": 512, "min": 64, "max": 2048, "step": 64}),
-            "batch_size": ("INT", {"default": 1, "min": 1, "max": 256, "step": 1}),
             "steps": ("INT", {"default": 25, "min": 1, "max": 200, "step": 1}),
             "guidance_scale": ("FLOAT", {"default": 10.0, "min": 0.0, "max": 20.0, "step": 0.01}),
             "seed": ("INT", {"default": 0, "min": 0, "max": 0xffffffffffffffff}),
@@ -291,7 +220,7 @@ class ella_sampler:
                     'PNDMScheduler',
                     'DEISMultistepScheduler'
                 ], {
-                    "default": 'DDIMScheduler'
+                    "default": 'DDPMScheduler'
                 }),
             },    
         }
@@ -299,14 +228,13 @@ class ella_sampler:
     RETURN_TYPES = ("IMAGE",)
     RETURN_NAMES = ("images",)
     FUNCTION = "process"
-    CATEGORY = "champWrapper"
+    CATEGORY = "ELLA-Wrapper"
 
-    def process(self, prompt, batch_size, width, height, steps, guidance_scale, seed, ella_model, scheduler):
+    def process(self, ella_embeds, width, height, steps, guidance_scale, seed, ella_model, scheduler):
         device = mm.get_torch_device()
         mm.unload_all_models()
         mm.soft_empty_cache()
         dtype = mm.unet_dtype()
-        t5_encoder=ella_model['t5_encoder']
         pipe=ella_model['pipe']
         pipe.to(device, dtype=dtype)
 
@@ -331,19 +259,63 @@ class ella_sampler:
 
         autocast_condition = (dtype != torch.float32) and not mm.is_device_mps(device)
         with torch.autocast(mm.get_autocast_device(device), dtype=dtype) if autocast_condition else nullcontext():
-                        
-            prompt = [prompt] if isinstance(prompt, str) else prompt
-            batch_size = len(prompt)
+            
+            # diffusers pipeline concatenate `prompt_embeds` too early...
+            # https://github.com/huggingface/diffusers/blob/b6d7e31d10df675d86c6fe7838044712c6dca4e9/src/diffusers/pipelines/stable_diffusion/pipeline_stable_diffusion.py#L913
+            pipe.unet.flexible_max_length_workaround = [ella_embeds["negative_prompt_embeds"].size(1)] * ella_embeds["batch_size"] + [ella_embeds["prompt_embeds"].size(1)] * ella_embeds["batch_size"]
 
-            fixed_negative = False
+            images = pipe(
+            prompt_embeds=ella_embeds["prompt_embeds"],
+            negative_prompt_embeds=ella_embeds["negative_prompt_embeds"],
+            guidance_scale=guidance_scale,
+            num_inference_steps=steps,
+            height=height,
+            width=width,
+            generator=[
+            torch.Generator(device=device).manual_seed(seed + i)
+            for i in range(ella_embeds["batch_size"])
+            ],
+                output_type="np.array",
+            ).images
+
+            image_out = torch.from_numpy(images).cpu().float()
+         
+            return (image_out,)
+
+class ella_t5_embeds:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {"required": {
+            "prompt": ("STRING", {"multiline": True, "default": "A vivid red book with a smooth, matte cover lies next to a glossy yellow vase. The vase, with a slightly curved silhouette, stands on a dark wood table with a noticeable grain pattern. The book appears slightly worn at the edges, suggesting frequent use, while the vase holds a fresh array of multicolored wildflowers.",}),
+            "batch_size": ("INT", {"default": 1, "min": 1, "max": 256, "step": 1}),
+            "max_length": ("INT", {"default": 128, "min": 1, "max": 256, "step": 1}),
+            "fixed_negative": ("BOOLEAN", {"default": False}),
+            },    
+        }
+
+    RETURN_TYPES = ("ELLAEMBEDS",)
+    RETURN_NAMES = ("ella_embeds",)
+    FUNCTION = "process"
+    CATEGORY = "ELLA-Wrapper"
+
+    def process(self, prompt, batch_size, max_length, fixed_negative):
+        device = mm.get_torch_device()
+        mm.unload_all_models()
+        mm.soft_empty_cache()
+        dtype = mm.unet_dtype()
+        t5_encoder = T5TextEmbedder().to(device, dtype=dtype)
+
+        autocast_condition = (dtype != torch.float32) and not mm.is_device_mps(device)
+        with torch.autocast(mm.get_autocast_device(device), dtype=dtype) if autocast_condition else nullcontext():
+            print("generating embeds")
+            prompt = [prompt] * batch_size    
+            prompt = [prompt] if isinstance(prompt, str) else prompt
+            #batch_size = len(prompt)
+
             prompt_embeds = t5_encoder(prompt, max_length=None).to(device, dtype)
             negative_prompt_embeds = t5_encoder(
-                [""] * batch_size, max_length=128 if fixed_negative else None
+                [""] * batch_size, max_length=max_length if fixed_negative else None
             ).to(device, dtype)
-
-            pipe.unet.flexible_max_length_workaround = [
-                negative_prompt_embeds.size(1)
-            ] * batch_size + [prompt_embeds.size(1)] * batch_size
 
             max_length = max([prompt_embeds.size(1), negative_prompt_embeds.size(1)])
             b, _, d = prompt_embeds.shape
@@ -367,31 +339,20 @@ class ella_sampler:
                 ],
                 dim=1,
             )
-
-            images = pipe(
-                prompt_embeds=prompt_embeds,
-                negative_prompt_embeds=negative_prompt_embeds,
-                guidance_scale=guidance_scale,
-                num_inference_steps=steps,
-                height=height,
-                width=width,
-                generator=[
-                torch.Generator(device=device).manual_seed(seed + i)
-                for i in range(batch_size)
-            ],
-                output_type="np.array",
-            ).images
-
-            tensor = torch.from_numpy(images).cpu().float()
-         
-            return (tensor,)
-
+            embeds = {
+                "prompt_embeds": prompt_embeds,
+                "negative_prompt_embeds": negative_prompt_embeds,
+                "batch_size": batch_size
+            }
+            return (embeds,)
 
 NODE_CLASS_MAPPINGS = {
     "ella_model_loader": ella_model_loader,
     "ella_sampler": ella_sampler,
+    "ella_t5_embeds": ella_t5_embeds
 }
 NODE_DISPLAY_NAME_MAPPINGS = {
     "ella_model_loader": "ELLA Model Loader",
     "ella_sampler": "ELLA Sampler",
+    "ella_t5_embeds": "ELLA T5 Embeds"
 }

@@ -262,7 +262,7 @@ class ella_model_loader:
             print("pipeline created")
             pbar.update(1)
             pipe.unet = ella_unet
-            t5_encoder = T5TextEmbedder().to(pipe.device, dtype=torch.float16)
+            t5_encoder = T5TextEmbedder().to(pipe.device, dtype=dtype)
             ella_model = {
                 'pipe': pipe,
                 'ella': ella,
@@ -381,7 +381,7 @@ class ella_sampler:
             ],
                 output_type="np.array",
             ).images
-            print(images.shape)
+
             tensor = torch.from_numpy(images).cpu().float()
          
             return (tensor,)

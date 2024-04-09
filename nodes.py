@@ -210,7 +210,7 @@ class ella_sampler:
             "width": ("INT", {"default": 512, "min": 64, "max": 2048, "step": 64}),
             "height": ("INT", {"default": 512, "min": 64, "max": 2048, "step": 64}),
             "steps": ("INT", {"default": 25, "min": 1, "max": 200, "step": 1}),
-            "guidance_scale": ("FLOAT", {"default": 10.0, "min": 0.0, "max": 20.0, "step": 0.01}),
+            "guidance_scale": ("FLOAT", {"default": 10.0, "min": 1.01, "max": 20.0, "step": 0.01}),
             "seed": ("INT", {"default": 0, "min": 0, "max": 0xffffffffffffffff}),
              "scheduler": (
                 [
@@ -311,7 +311,13 @@ class ella_t5_embeds:
         mm.unload_all_models()
         mm.soft_empty_cache()
         dtype = mm.unet_dtype()
-        t5_encoder = T5TextEmbedder().to(device, dtype=dtype)
+        checkpoint_path = os.path.join(script_directory, 'checkpoints')
+        repo_id = "ybelkada/flan-t5-xl-sharded-bf16"
+        t5_path = os.path.join(checkpoint_path, repo_id)
+        if not os.path.exists(t5_path):
+            from huggingface_hub import snapshot_download
+            snapshot_download(repo_id=repo_id, local_dir=t5_path, local_dir_use_symlinks=False)
+        t5_encoder = T5TextEmbedder(pretrained_path=t5_path).to(device, dtype=dtype)
 
         autocast_condition = (dtype != torch.float32) and not mm.is_device_mps(device)
         with torch.autocast(mm.get_autocast_device(device), dtype=dtype) if autocast_condition else nullcontext():

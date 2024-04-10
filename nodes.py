@@ -11,6 +11,7 @@ from .model import ELLA, T5TextEmbedder
 from transformers import CLIPTokenizer
 import comfy.model_management as mm
 import comfy.utils
+import folder_paths
 
 script_directory = os.path.dirname(os.path.abspath(__file__))
 
@@ -124,7 +125,7 @@ class ella_model_loader:
             original_config = OmegaConf.load(os.path.join(script_directory, f"configs/v1-inference.yaml"))
 
             print("loading ELLA")
-            checkpoint_path = os.path.join(script_directory, 'checkpoints')
+            checkpoint_path = os.path.join(folder_paths.models_dir,'ella')
             ella_path = os.path.join(checkpoint_path, 'ella-sd1.5-tsc-t5xl.safetensors')
             if not os.path.exists(ella_path):
                 from huggingface_hub import snapshot_download
@@ -318,13 +319,20 @@ class ella_t5_embeds:
         mm.unload_all_models()
         mm.soft_empty_cache()
         dtype = mm.unet_dtype()
-        checkpoint_path = os.path.join(script_directory, 'checkpoints')
-        repo_id = "ybelkada/flan-t5-xl-sharded-bf16"
-        t5_path = os.path.join(checkpoint_path, repo_id)
-        if not os.path.exists(t5_path):
-            from huggingface_hub import snapshot_download
-            snapshot_download(repo_id=repo_id, local_dir=t5_path, local_dir_use_symlinks=False)
-        t5_encoder = T5TextEmbedder(pretrained_path=t5_path).to(device, dtype=dtype)
+
+        #old checkpoint location
+        repo_id_old = "ybelkada/flan-t5-xl-sharded-bf16"
+        checkpoint_path_old = os.path.join(script_directory, 'checkpoints')
+        t5_path_old = os.path.join(checkpoint_path_old, repo_id_old)          
+
+        if os.path.exists(t5_path_old):    
+            t5_encoder = T5TextEmbedder(pretrained_path=t5_path_old).to(device, dtype=dtype)
+        else:
+            t5_path = os.path.join(folder_paths.models_dir,'t5_model', 'flan-t5-encoder-only-bf16')
+            if not os.path.exists(t5_path): 
+                from huggingface_hub import snapshot_download
+                snapshot_download(repo_id="Kijai/flan-t5-xl-encoder-only-bf16", local_dir=t5_path, local_dir_use_symlinks=False)
+            t5_encoder = T5TextEmbedder(pretrained_path=t5_path).to(device, dtype=dtype)
 
         autocast_condition = (dtype != torch.float32) and not mm.is_device_mps(device)
         with torch.autocast(mm.get_autocast_device(device), dtype=dtype) if autocast_condition else nullcontext():

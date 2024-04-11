@@ -74,23 +74,6 @@ class ELLAProxyUNet(torch.nn.Module):
             encoder_attention_mask=encoder_attention_mask,
             return_dict=return_dict,
         )
-
-def generate_image_with_fixed_max_length(
-    pipe, t5_encoder, prompt, output_type="pt", **pipe_kwargs
-):
-    prompt = [prompt] if isinstance(prompt, str) else prompt
-
-    prompt_embeds = t5_encoder(prompt, max_length=128).to(pipe.device, pipe.dtype)
-    negative_prompt_embeds = t5_encoder([""] * len(prompt), max_length=128).to(
-        pipe.device, pipe.dtype
-    )
-
-    return pipe(
-        prompt_embeds=prompt_embeds,
-        negative_prompt_embeds=negative_prompt_embeds,
-        **pipe_kwargs,
-        output_type=output_type,
-    ).images
     
 class ella_model_loader:
     @classmethod
@@ -213,7 +196,7 @@ class ella_sampler:
             "steps": ("INT", {"default": 25, "min": 1, "max": 200, "step": 1}),
             "guidance_scale": ("FLOAT", {"default": 10.0, "min": 1.01, "max": 20.0, "step": 0.01}),
             "seed": ("INT", {"default": 0, "min": 0, "max": 0xffffffffffffffff}),
-             "scheduler": (
+            "scheduler": (
                 [
                     'DPMSolverMultistepScheduler',
                     'DPMSolverMultistepScheduler_SDE_karras',
@@ -316,6 +299,7 @@ class ella_t5_embeds:
 
     def process(self, prompt, batch_size, max_length, fixed_negative, flexible_max_length=True):
         device = mm.get_torch_device()
+        offload_device = mm.unet_offload_device()
         mm.unload_all_models()
         mm.soft_empty_cache()
         dtype = mm.unet_dtype()
@@ -334,6 +318,7 @@ class ella_t5_embeds:
                 snapshot_download(repo_id="Kijai/flan-t5-xl-encoder-only-bf16", local_dir=t5_path, local_dir_use_symlinks=False)
             t5_encoder = T5TextEmbedder(pretrained_path=t5_path).to(device, dtype=dtype)
 
+        t5_encoder.to(device)
         autocast_condition = (dtype != torch.float32) and not mm.is_device_mps(device)
         with torch.autocast(mm.get_autocast_device(device), dtype=dtype) if autocast_condition else nullcontext():
             print("generating embeds")
@@ -371,6 +356,7 @@ class ella_t5_embeds:
                 "negative_prompt_embeds": negative_prompt_embeds,
                 "batch_size": batch_size
             }
+            t5_encoder.to(offload_device)
             return (embeds,)
 
 NODE_CLASS_MAPPINGS = {

@@ -328,7 +328,7 @@ class ella_t5_embeds:
         if os.path.exists(t5_path_old):    
             t5_encoder = T5TextEmbedder(pretrained_path=t5_path_old).to(device, dtype=dtype)
         else:
-            t5_path = os.path.join(folder_paths.models_dir,'t5_model', 'flan-t5-encoder-only-bf16')
+            t5_path = os.path.join(folder_paths.models_dir,'t5_model', 'flan-t5-xl-encoder-only-bf16')
             if not os.path.exists(t5_path): 
                 from huggingface_hub import snapshot_download
                 snapshot_download(repo_id="Kijai/flan-t5-xl-encoder-only-bf16", local_dir=t5_path, local_dir_use_symlinks=False)

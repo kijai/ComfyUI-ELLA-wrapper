@@ -1,11 +1,32 @@
 import os
-from typing import Optional
-
 from typing import Any, Optional, Union
 from contextlib import nullcontext
 import safetensors.torch
 import torch
-from diffusers import DPMSolverMultistepScheduler, StableDiffusionPipeline, EulerDiscreteScheduler, EulerAncestralDiscreteScheduler, AutoencoderKL, UNet2DConditionModel, DDIMScheduler, LCMScheduler, DDPMScheduler, DEISMultistepScheduler, PNDMScheduler
+try:
+    from diffusers import (
+        DPMSolverMultistepScheduler, 
+        StableDiffusionPipeline, 
+        EulerDiscreteScheduler, 
+        EulerAncestralDiscreteScheduler, 
+        AutoencoderKL, 
+        UNet2DConditionModel, 
+        LCMScheduler, 
+        DDPMScheduler, 
+        DEISMultistepScheduler, 
+        PNDMScheduler,
+        UniPCMultistepScheduler
+    )
+    from diffusers.loaders.single_file_utils import (
+        convert_ldm_vae_checkpoint, 
+        convert_ldm_unet_checkpoint, 
+        create_vae_diffusers_config, 
+        create_unet_diffusers_config,
+        create_text_encoder_from_ldm_clip_checkpoint
+    )            
+except:
+    raise ImportError("Diffusers version too old. Please update to 0.26.0 minimum.")
+
 from omegaconf import OmegaConf
 from .model import ELLA, T5TextEmbedder
 from transformers import CLIPTokenizer
@@ -114,7 +135,6 @@ class ella_model_loader:
                 from huggingface_hub import snapshot_download
                 snapshot_download(repo_id="QQGYLab/ELLA", local_dir=checkpoint_path, local_dir_use_symlinks=False)
             
-            from diffusers.loaders.single_file_utils import (convert_ldm_vae_checkpoint, convert_ldm_unet_checkpoint, create_text_encoder_from_ldm_clip_checkpoint, create_vae_diffusers_config, create_unet_diffusers_config)
             ella = ELLA()
             safetensors.torch.load_model(ella, ella_path, strict=True)
 
@@ -205,7 +225,8 @@ class ella_sampler:
                     'PNDMScheduler',
                     'DEISMultistepScheduler',
                     'EulerDiscreteScheduler',
-                    'EulerAncestralDiscreteScheduler'
+                    'EulerAncestralDiscreteScheduler',
+                    'UniPCMultistepScheduler'
                 ], {
                     "default": 'DPMSolverMultistepScheduler'
                 }),
@@ -252,6 +273,8 @@ class ella_sampler:
             noise_scheduler = EulerDiscreteScheduler(**scheduler_config)
         elif scheduler == 'EulerAncestralDiscreteScheduler':
             noise_scheduler = EulerAncestralDiscreteScheduler(**scheduler_config)
+        elif scheduler == 'UniPCMultistepScheduler':
+            noise_scheduler = UniPCMultistepScheduler(**scheduler_config)
         pipe.scheduler = noise_scheduler
 
         autocast_condition = (dtype != torch.float32) and not mm.is_device_mps(device)

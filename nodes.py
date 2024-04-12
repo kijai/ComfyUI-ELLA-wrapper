@@ -198,7 +198,7 @@ class ella_model_loader:
             )
             print("pipeline created")
             pbar.update(1)
-            
+            self.pipe.enable_model_cpu_offload()
             ella_model = {
                 'pipe': self.pipe,
             }

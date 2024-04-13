@@ -1,5 +1,5 @@
 import os
-from typing import Any, Optional, Union
+from typing import Any, Optional, Union, Tuple
 from contextlib import nullcontext
 import safetensors.torch
 import torch
@@ -26,6 +26,12 @@ try:
     )            
 except:
     raise ImportError("Diffusers version too old. Please update to 0.26.0 minimum.")
+
+from contextlib import nullcontext
+from diffusers.utils import is_accelerate_available
+if is_accelerate_available():
+    from accelerate import init_empty_weights
+    from accelerate.utils import set_module_tensor_to_device
 
 from omegaconf import OmegaConf
 from .model import ELLA, T5TextEmbedder
@@ -135,32 +141,34 @@ class ella_model_loader:
                 from huggingface_hub import snapshot_download
                 snapshot_download(repo_id="QQGYLab/ELLA", local_dir=checkpoint_path, local_dir_use_symlinks=False)
             
-            ella = ELLA()
-            safetensors.torch.load_model(ella, ella_path, strict=True)
+            with (init_empty_weights() if is_accelerate_available() else nullcontext()):
+                converted_vae_config = create_vae_diffusers_config(original_config, image_size=512)
+                new_vae = AutoencoderKL(**converted_vae_config)
 
+                converted_unet_config = create_unet_diffusers_config(original_config, image_size=512)
+                unet = UNet2DConditionModel(**converted_unet_config)
+                
             clip_sd = None
             load_models = [model]
             load_models.append(clip.load_model())
             clip_sd = clip.get_sd()
-            
             comfy.model_management.load_models_gpu(load_models)
             sd = model.model.state_dict_for_saving(clip_sd, vae.get_sd(), None)
 
-            # 1. vae
-            converted_vae_config = create_vae_diffusers_config(original_config, image_size=512)
             converted_vae = convert_ldm_vae_checkpoint(sd, converted_vae_config)
-            vae = AutoencoderKL(**converted_vae_config)
-            vae.load_state_dict(converted_vae, strict=False)
-
+            for key in converted_vae:
+                set_module_tensor_to_device(new_vae, key, device=device, dtype=dtype, value=converted_vae[key])
+            del converted_vae
             pbar.update(1)
-            # 2. unet
-            converted_unet_config = create_unet_diffusers_config(original_config, image_size=512)
-            converted_unet = convert_ldm_unet_checkpoint(sd, converted_unet_config)
-            
-            unet = UNet2DConditionModel(**converted_unet_config)
-            unet.load_state_dict(converted_unet, strict=False)
+
+            converted_unet = convert_ldm_unet_checkpoint(sd, converted_unet_config)   
+            for key in converted_unet:
+               set_module_tensor_to_device(unet, key, device=device, dtype=dtype, value=converted_unet[key])
+            del converted_unet
+
+            ella = ELLA()    
+            safetensors.torch.load_model(ella, ella_path, strict=True)
             ella.to(device, dtype=dtype)
-            unet = unet.to(device)
             ella_unet = ELLAProxyUNet(ella, unet)
 
             pbar.update(1)
@@ -187,7 +195,7 @@ class ella_model_loader:
             print("creating pipeline")
             self.pipe = StableDiffusionPipeline(
                 unet=ella_unet,
-                vae=vae,
+                vae=new_vae,
                 text_encoder=text_encoder,
                 tokenizer=tokenizer,
                 scheduler=scheduler,
@@ -204,7 +212,8 @@ class ella_model_loader:
             }
    
         return (ella_model,)
-    
+
+
 class ella_sampler:
     @classmethod
     def INPUT_TYPES(s):

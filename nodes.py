@@ -156,14 +156,20 @@ class ella_model_loader:
             sd = model.model.state_dict_for_saving(clip_sd, vae.get_sd(), None)
 
             converted_vae = convert_ldm_vae_checkpoint(sd, converted_vae_config)
-            for key in converted_vae:
-                set_module_tensor_to_device(new_vae, key, device=device, dtype=dtype, value=converted_vae[key])
+            if is_accelerate_available():
+                for key in converted_vae:
+                    set_module_tensor_to_device(new_vae, key, device=device, dtype=dtype, value=converted_vae[key])
+            else:
+                new_vae.load_state_dict(converted_vae, strict=False)
             del converted_vae
             pbar.update(1)
 
-            converted_unet = convert_ldm_unet_checkpoint(sd, converted_unet_config)   
-            for key in converted_unet:
-               set_module_tensor_to_device(unet, key, device=device, dtype=dtype, value=converted_unet[key])
+            converted_unet = convert_ldm_unet_checkpoint(sd, converted_unet_config)
+            if is_accelerate_available():
+                for key in converted_unet:
+                    set_module_tensor_to_device(unet, key, device=device, dtype=dtype, value=converted_unet[key])
+            else:
+                unet.load_state_dict(converted_unet, strict=False)
             del converted_unet
 
             ella = ELLA()    

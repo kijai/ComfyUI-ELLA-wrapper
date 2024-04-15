@@ -26,7 +26,7 @@ try:
     )            
 except:
     raise ImportError("Diffusers version too old. Please update to 0.26.0 minimum.")
-
+from .scheduling_tcd import TCDScheduler
 from contextlib import nullcontext
 from diffusers.utils import is_accelerate_available
 if is_accelerate_available():
@@ -241,7 +241,8 @@ class ella_sampler:
                     'DEISMultistepScheduler',
                     'EulerDiscreteScheduler',
                     'EulerAncestralDiscreteScheduler',
-                    'UniPCMultistepScheduler'
+                    'UniPCMultistepScheduler',
+                    'TCDScheduler'
                 ], {
                     "default": 'DPMSolverMultistepScheduler'
                 }),
@@ -290,6 +291,9 @@ class ella_sampler:
             noise_scheduler = EulerAncestralDiscreteScheduler(**scheduler_config)
         elif scheduler == 'UniPCMultistepScheduler':
             noise_scheduler = UniPCMultistepScheduler(**scheduler_config)
+        elif scheduler == 'TCDScheduler':
+            noise_scheduler = TCDScheduler(**scheduler_config)
+        
         pipe.scheduler = noise_scheduler
 
         autocast_condition = (dtype != torch.float32) and not mm.is_device_mps(device)

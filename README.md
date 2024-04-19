@@ -1,3 +1,8 @@
+# UPDATE:
+Tencent has released official Comfy ELLA nodes that should now be used instead of this:
+
+https://github.com/TencentQQGYLab/ComfyUI-ELLA
+
 # ComfyUI wrapper nodes to use the Diffusers implementation of ELLA
 
 ![image](https://github.com/kijai/ComfyUI-ELLA-wrapper/assets/40791699/d255385f-dd10-4eec-ada7-b7774080c6a7)

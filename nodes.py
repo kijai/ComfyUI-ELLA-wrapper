@@ -33,6 +33,8 @@ if is_accelerate_available():
     from accelerate import init_empty_weights
     from accelerate.utils import set_module_tensor_to_device
 
+from .hidiffusion import apply_hidiffusion, remove_hidiffusion
+
 from omegaconf import OmegaConf
 from .model import ELLA, T5TextEmbedder
 from transformers import CLIPTokenizer
@@ -218,8 +220,224 @@ class ella_model_loader:
             }
    
         return (ella_model,)
+    
+class diffusers_model_loader:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {"required": {
+            "model": ("MODEL",),
+            "clip": ("CLIP",),
+            "vae": ("VAE",),
+            
+            },
+        }
 
+    RETURN_TYPES = ("DIFFUSERSMODEL",)
+    RETURN_NAMES = ("diffusers_model",)
+    FUNCTION = "loadmodel"
+    CATEGORY = "ELLA-Wrapper"
 
+    def loadmodel(self, model, clip, vae):
+        mm.soft_empty_cache()
+        dtype = mm.unet_dtype()
+        vae_dtype = mm.vae_dtype()
+        device = mm.get_torch_device()
+
+        custom_config = {
+            'model': model,
+            'vae': vae,
+        }
+        if not hasattr(self, 'model') or self.model == None or custom_config != self.current_config:
+            pbar = comfy.utils.ProgressBar(5)
+            self.current_config = custom_config
+            # setup pretrained models
+            original_config = OmegaConf.load(os.path.join(script_directory, f"configs/v1-inference.yaml"))
+
+            print("loading ELLA")
+            checkpoint_path = os.path.join(folder_paths.models_dir,'ella')
+            ella_path = os.path.join(checkpoint_path, 'ella-sd1.5-tsc-t5xl.safetensors')
+            if not os.path.exists(ella_path):
+                from huggingface_hub import snapshot_download
+                snapshot_download(repo_id="QQGYLab/ELLA", local_dir=checkpoint_path, local_dir_use_symlinks=False)
+            
+            with (init_empty_weights() if is_accelerate_available() else nullcontext()):
+                converted_vae_config = create_vae_diffusers_config(original_config, image_size=512)
+                new_vae = AutoencoderKL(**converted_vae_config)
+
+                converted_unet_config = create_unet_diffusers_config(original_config, image_size=512)
+                unet = UNet2DConditionModel(**converted_unet_config)
+                
+            clip_sd = None
+            load_models = [model]
+            load_models.append(clip.load_model())
+            clip_sd = clip.get_sd()
+            comfy.model_management.load_models_gpu(load_models)
+            sd = model.model.state_dict_for_saving(clip_sd, vae.get_sd(), None)
+
+            converted_vae = convert_ldm_vae_checkpoint(sd, converted_vae_config)
+            if is_accelerate_available():
+                for key in converted_vae:
+                    set_module_tensor_to_device(new_vae, key, device=device, dtype=dtype, value=converted_vae[key])
+            else:
+                new_vae.load_state_dict(converted_vae, strict=False)
+            del converted_vae
+            pbar.update(1)
+
+            converted_unet = convert_ldm_unet_checkpoint(sd, converted_unet_config)
+            if is_accelerate_available():
+                for key in converted_unet:
+                    set_module_tensor_to_device(unet, key, device=device, dtype=dtype, value=converted_unet[key])
+            else:
+                unet.load_state_dict(converted_unet, strict=False)
+            del converted_unet
+
+            pbar.update(1)
+            # 3. text_model
+            print("loading text model")
+            text_encoder = create_text_encoder_from_ldm_clip_checkpoint("openai/clip-vit-large-patch14",sd)
+            scheduler_config = {
+                'num_train_timesteps': 1000,
+                'beta_start':    0.00085,
+                'beta_end':      0.012,
+                'beta_schedule': "scaled_linear",
+                'steps_offset': 1
+            }
+            # 4. tokenizer
+            tokenizer_path = os.path.join(script_directory, "configs/tokenizer")
+            tokenizer = CLIPTokenizer.from_pretrained(tokenizer_path)
+
+            scheduler=DPMSolverMultistepScheduler(**scheduler_config)
+            pbar.update(1)
+            del sd
+
+            pbar.update(1)
+
+            print("creating pipeline")
+            self.pipe = StableDiffusionPipeline(
+                unet=unet,
+                vae=new_vae,
+                text_encoder=text_encoder,
+                tokenizer=tokenizer,
+                scheduler=scheduler,
+                safety_checker=None,
+                feature_extractor=None,
+                requires_safety_checker=False,
+                image_encoder=None
+            )
+            print("pipeline created")
+            pbar.update(1)
+            self.pipe.enable_model_cpu_offload()
+            diffusers_model = {
+                'pipe': self.pipe,
+            }
+   
+        return (diffusers_model,)
+
+class diffusers_sampler:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {"required": {
+            "diffusers_model": ("DIFFUSERSMODEL",),
+            "width": ("INT", {"default": 512, "min": 64, "max": 2048, "step": 64}),
+            "height": ("INT", {"default": 512, "min": 64, "max": 2048, "step": 64}),
+            "steps": ("INT", {"default": 25, "min": 1, "max": 200, "step": 1}),
+            "guidance_scale": ("FLOAT", {"default": 10.0, "min": 1.01, "max": 20.0, "step": 0.01}),
+            "seed": ("INT", {"default": 0, "min": 0, "max": 0xffffffffffffffff}),
+            "scheduler": (
+                [
+                    'DPMSolverMultistepScheduler',
+                    'DPMSolverMultistepScheduler_SDE_karras',
+                    'DDPMScheduler',
+                    'LCMScheduler',
+                    'PNDMScheduler',
+                    'DEISMultistepScheduler',
+                    'EulerDiscreteScheduler',
+                    'EulerAncestralDiscreteScheduler',
+                    'UniPCMultistepScheduler',
+                    'TCDScheduler'
+                ], {
+                    "default": 'DPMSolverMultistepScheduler'
+                }),
+            "prompt": ("STRING", {"default": "positive", "multiline": True}),
+            "n_prompt": ("STRING", {"default": "negative", "multiline": True}),
+            "hidiffusion": ("BOOLEAN", {"default": False}),
+            },    
+        }
+
+    RETURN_TYPES = ("IMAGE",)
+    RETURN_NAMES = ("images",)
+    FUNCTION = "process"
+    CATEGORY = "ELLA-Wrapper"
+
+    def process(self, diffusers_model, width, height, steps, guidance_scale, seed, scheduler, prompt, n_prompt, hidiffusion):
+        device = mm.get_torch_device()
+        mm.unload_all_models()
+        mm.soft_empty_cache()
+        dtype = mm.unet_dtype()
+        pipe=diffusers_model['pipe']
+        pipe.to(device, dtype=dtype)
+
+        scheduler_config = {
+                'num_train_timesteps': 1000,
+                'beta_start':    0.00085,
+                'beta_end':      0.012,
+                'beta_schedule': "scaled_linear",
+                'steps_offset': 1,
+            }
+        if scheduler == 'DPMSolverMultistepScheduler':
+            noise_scheduler = DPMSolverMultistepScheduler(**scheduler_config)
+        elif scheduler == 'DPMSolverMultistepScheduler_SDE_karras':
+            scheduler_config.update({"algorithm_type": "sde-dpmsolver++"})
+            scheduler_config.update({"use_karras_sigmas": True})
+            noise_scheduler = DPMSolverMultistepScheduler(**scheduler_config)
+        elif scheduler == 'DDPMScheduler':
+            noise_scheduler = DDPMScheduler(**scheduler_config)
+        elif scheduler == 'LCMScheduler':
+            noise_scheduler = LCMScheduler(**scheduler_config)
+        elif scheduler == 'PNDMScheduler':
+            scheduler_config.update({"set_alpha_to_one": False})
+            scheduler_config.update({"trained_betas": None})
+            noise_scheduler = PNDMScheduler(**scheduler_config)
+        elif scheduler == 'DEISMultistepScheduler':
+            noise_scheduler = DEISMultistepScheduler(**scheduler_config)
+        elif scheduler == 'EulerDiscreteScheduler':
+            noise_scheduler = EulerDiscreteScheduler(**scheduler_config)
+        elif scheduler == 'EulerAncestralDiscreteScheduler':
+            noise_scheduler = EulerAncestralDiscreteScheduler(**scheduler_config)
+        elif scheduler == 'UniPCMultistepScheduler':
+            noise_scheduler = UniPCMultistepScheduler(**scheduler_config)
+        elif scheduler == 'TCDScheduler':
+            noise_scheduler = TCDScheduler(**scheduler_config)
+        
+        pipe.scheduler = noise_scheduler
+        if hidiffusion:
+            apply_hidiffusion(pipe)
+        else:
+            remove_hidiffusion(pipe)
+
+        autocast_condition = (dtype != torch.float32) and not mm.is_device_mps(device)
+        with torch.autocast(mm.get_autocast_device(device), dtype=dtype) if autocast_condition else nullcontext():
+            
+
+            images = pipe(
+            prompt = prompt,
+            negative_prompt = n_prompt,
+            prompt_embeds=None,
+            negative_prompt_embeds=None,
+            guidance_scale=guidance_scale,
+            num_inference_steps=steps,
+            height=height,
+            width=width,
+            generator=[
+            torch.Generator(device=device).manual_seed(seed + i)
+            for i in range(1)
+            ],
+                output_type="pt",
+            ).images
+
+            image_out = images.permute(0, 2, 3, 1).cpu().float()
+            return (image_out,)
+        
 class ella_sampler:
     @classmethod
     def INPUT_TYPES(s):
@@ -246,7 +464,10 @@ class ella_sampler:
                 ], {
                     "default": 'DPMSolverMultistepScheduler'
                 }),
-            },    
+            },
+            "optional": {
+                "hidiffusion": ("BOOLEAN", {"default": False}),
+            } 
         }
 
     RETURN_TYPES = ("IMAGE",)
@@ -254,7 +475,7 @@ class ella_sampler:
     FUNCTION = "process"
     CATEGORY = "ELLA-Wrapper"
 
-    def process(self, ella_embeds, width, height, steps, guidance_scale, seed, ella_model, scheduler):
+    def process(self, ella_embeds, width, height, steps, guidance_scale, seed, ella_model, scheduler, hidiffusion=False):
         device = mm.get_torch_device()
         mm.unload_all_models()
         mm.soft_empty_cache()
@@ -295,6 +516,10 @@ class ella_sampler:
             noise_scheduler = TCDScheduler(**scheduler_config)
         
         pipe.scheduler = noise_scheduler
+        if hidiffusion:
+            apply_hidiffusion(pipe)
+        else:
+            remove_hidiffusion(pipe)
 
         autocast_condition = (dtype != torch.float32) and not mm.is_device_mps(device)
         with torch.autocast(mm.get_autocast_device(device), dtype=dtype) if autocast_condition else nullcontext():
@@ -319,6 +544,7 @@ class ella_sampler:
 
             image_out = images.permute(0, 2, 3, 1).cpu().float()
             return (image_out,)
+
 
 class ella_t5_embeds:
     @classmethod
@@ -404,10 +630,15 @@ class ella_t5_embeds:
 NODE_CLASS_MAPPINGS = {
     "ella_model_loader": ella_model_loader,
     "ella_sampler": ella_sampler,
-    "ella_t5_embeds": ella_t5_embeds
+    "ella_t5_embeds": ella_t5_embeds,
+    "diffusers_model_loader": diffusers_model_loader,
+    "diffusers_sampler": diffusers_sampler
 }
 NODE_DISPLAY_NAME_MAPPINGS = {
     "ella_model_loader": "ELLA Model Loader",
     "ella_sampler": "ELLA Sampler",
-    "ella_t5_embeds": "ELLA T5 Embeds"
+    "ella_t5_embeds": "ELLA T5 Embeds",
+    "diffusers_model_loader": "Diffusers Model Loader",
+    "diffusers_sampler": "Diffusers Sampler"
+
 }

@@ -444,8 +444,8 @@ class ella_sampler:
         return {"required": {
             "ella_model": ("ELLAMODEL",),
             "ella_embeds": ("ELLAEMBEDS",),
-            "width": ("INT", {"default": 512, "min": 64, "max": 2048, "step": 64}),
-            "height": ("INT", {"default": 512, "min": 64, "max": 2048, "step": 64}),
+            "width": ("INT", {"default": 512, "min": 64, "max": 8192, "step": 64}),
+            "height": ("INT", {"default": 512, "min": 64, "max": 8192, "step": 64}),
             "steps": ("INT", {"default": 25, "min": 1, "max": 200, "step": 1}),
             "guidance_scale": ("FLOAT", {"default": 10.0, "min": 1.01, "max": 20.0, "step": 0.01}),
             "seed": ("INT", {"default": 0, "min": 0, "max": 0xffffffffffffffff}),

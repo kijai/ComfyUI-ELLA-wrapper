@@ -326,7 +326,7 @@ class diffusers_model_loader:
             )
             print("pipeline created")
             pbar.update(1)
-            self.pipe.enable_model_cpu_offload()
+            #self.pipe.enable_model_cpu_offload()
             diffusers_model = {
                 'pipe': self.pipe,
             }

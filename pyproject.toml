@@ -1,6 +1,6 @@
 [project]
 name = "comfyui-ella-wrapper"
-description = ""
+description = "ComfyUI wrapper nodes to use the Diffusers implementation of ELLA"
 version = "1.0.0"
 license = "LICENSE"
 dependencies = ["diffusers>=0.26.0", "accelerate", "omegaconf", "sentencepiece"]
